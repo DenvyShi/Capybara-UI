@@ -797,7 +797,7 @@ function RallyHelper_UpdateUnconfirmed()
 
       line:SetText(
         color .. label .. "|r" ..
-        "  |cFFAAAAAA" .. (verify and verify[ev] and table.getn(verify[ev]) or 0) .. "/2 Unconfirmed  " .. FormatAgo(ts) .. "|r"
+        "  |cFFAAAAAA" .. (type(RH_GetVerifyCount) == "function" and RH_GetVerifyCount(ev) or 0) .. "/2 Unconfirmed  " .. FormatAgo(ts) .. "|r"
       )
       line:Show()
     end
@@ -825,6 +825,47 @@ end
 _G.RallyHelper_ToggleUI = function()
   if not ui then CreateUI() end
   if ui:IsShown() then ui:Hide() else ui:Show() end
+end
+
+-- Lightweight on-screen toast, used when toastMode == "ui". Previously the core
+-- referenced RallyHelper_ShowToast but it was never defined, so "ui" toasts
+-- silently did nothing. This provides a self-contained fading notification.
+local toastFrame
+_G.RallyHelper_ShowToast = function(text)
+  if not text then return end
+  if not toastFrame then
+    toastFrame = CreateFrame("Frame", "RallyHelperToastFrame", UIParent)
+    toastFrame:SetWidth(320)
+    toastFrame:SetHeight(40)
+    toastFrame:SetPoint("TOP", UIParent, "TOP", 0, -120)
+    toastFrame:SetFrameStrata("HIGH")
+    toastFrame:SetBackdrop({
+      bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+      edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+      tile = true, tileSize = 16, edgeSize = 16,
+      insets = { left = 4, right = 4, top = 4, bottom = 4 }
+    })
+    toastFrame:SetBackdropColor(0, 0, 0, 0.8)
+    local fs = toastFrame:CreateFontString(nil, "OVERLAY")
+    fs:SetFont("Fonts\\FRIZQT__.TTF", 15, "OUTLINE")
+    fs:SetPoint("CENTER", toastFrame, "CENTER", 0, 0)
+    fs:SetTextColor(0.2, 1, 0.6)
+    toastFrame.text = fs
+    toastFrame:SetScript("OnUpdate", function()
+      if not toastFrame.hideAt then return end
+      local remaining = toastFrame.hideAt - GetTime()
+      if remaining <= 0 then
+        toastFrame:Hide()
+        toastFrame.hideAt = nil
+      elseif remaining < 1 then
+        toastFrame:SetAlpha(remaining)
+      end
+    end)
+  end
+  toastFrame.text:SetText(text)
+  toastFrame:SetAlpha(1)
+  toastFrame.hideAt = GetTime() + 4
+  toastFrame:Show()
 end
 
 _G.RH_CreateUI = CreateUI

@@ -19,6 +19,17 @@ local DB
 local CharDB
 
 local verify = {}
+
+-- Exposes the current number of pending verification samples for an event so
+-- other files (e.g. the Unconfirmed window in the UI) can display it. Returns 0
+-- when nothing is pending. `verify` is a local upvalue captured by this closure.
+_G.RH_GetVerifyCount = function(ev)
+  if ev and verify[ev] then
+    return table.getn(verify[ev])
+  end
+  return 0
+end
+
 local RH_Users = {}
 local lastSend = {}
 local RH_LocalDetected = {}
@@ -640,15 +651,30 @@ local function HandleChannel(msg, channel)
   local ev = parts[1]
   local ts = tonumber(parts[2])
   local sender = parts[3]
-  local zone = parts[4]
 
-  if DB.debug then
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[RH Debug]|r Parsed → ev=" .. tostring(ev) .. " ts=" .. tostring(ts) .. " sender=" .. tostring(sender))
-  end
-
+  -- Wire format: ev^ts^sender[^zone]^v<N>
+  -- The version tag is always the final field. Parse it positionally so it is
+  -- never mistaken for a zone, and derive the (optional) zone from what remains.
+  local senderVersion = nil
+  local lastIdx = table.getn(parts)
+  local verPart = parts[lastIdx]
   if type(verPart) == "string" then
     local v = strmatch(verPart, "^v(%d+)$")
     if v then senderVersion = tonumber(v) end
+  end
+
+  -- Zone occupies index 4 only when there is a field between the sender and the
+  -- trailing version tag (>= 5 fields). Legacy messages with no version tag keep
+  -- the old behaviour where index 4 is the zone.
+  local zone
+  if senderVersion then
+    if lastIdx >= 5 then zone = parts[4] end
+  else
+    zone = parts[4]
+  end
+
+  if DB.debug then
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99[RH Debug]|r Parsed → ev=" .. tostring(ev) .. " ts=" .. tostring(ts) .. " sender=" .. tostring(sender) .. " ver=" .. tostring(senderVersion))
   end
 
   RH_ClockOffset = RH_ClockOffset or {}
